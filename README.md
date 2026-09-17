@@ -4,6 +4,16 @@ Cross-encoder rerank client. Given a query and a candidate set, `rerankDocuments
 posts them to a reranker, maps the reply back to your own document ids, and
 returns `{id, score}` sorted descending.
 
+## Install
+
+```bash
+bun add @corbits/reranking
+```
+
+```bash
+npm install @corbits/reranking
+```
+
 Unlike embeddings, reranking has **no OpenAI-compatible standard** and is not
 converging on one — TEI does not serve an OpenAI-shaped rerank route at all
 ([text-embeddings-inference#683](https://github.com/huggingface/text-embeddings-inference/issues/683)).
@@ -49,6 +59,26 @@ const ranked = await rerankDocuments(
   { deps },
 );
 ```
+
+## API
+
+- `rerankDocuments(query, docs, config, options)` — rerank `RerankDoc[]`
+  (`{id, text}`) against the query and return `RerankResult[]`
+  (`{id, score}`), sorted descending. Empty input short-circuits with no
+  request. Config is validated by `RerankConfigSchema` (`RerankConfig`);
+  options (`RerankOptions`) take `deps`, an optional `retryPolicy`,
+  `registry`, and `signal`.
+- Adapters — `RerankAdapter` (`buildRequest` / `parseResponse`, optional
+  `extractRetryAfterMs`), `RerankAPIStyle` (`tei` | `cohere` | `voyage`),
+  `rerankAdapters`, `rerankAdapterRegistry`, and
+  `createRerankAdapterRegistry` for house formats. Supporting types:
+  `RerankDoc`, `RerankResult`, `RerankRequestConfig`,
+  `RerankRequestBuilder`, `RerankResponseParser`, `RerankAdapterRegistry`.
+- Transport — `runJSONRequest` sends the built request through `deps.fetch`
+  with retry; `extractRetryAfterMs` and `RetryAfterExtractor` handle
+  provider pacing; `ModelRequestError` carries the classified
+  `InferenceError` as `reason` with the URL (`RunRequestOptions` configures
+  the call).
 
 ## Scores are mapped by index, never by position
 

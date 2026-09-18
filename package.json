@@ -38,7 +38,9 @@
     "type": "git",
     "url": "git+https://github.com/corbitsdev/corbits-reranking.git"
   },
+  "author": "Sawyer Cutler <sawyer@dirtroad.dev>",
   "engines": {
-    "bun": ">=1.2.0"
+    "bun": ">=1.2.0",
+    "node": ">=24"
   }
 }

@@ -8,19 +8,19 @@ Unlike embeddings, reranking has no OpenAI-compatible standard — TEI does
 not serve an OpenAI-shaped rerank route at all — so this is a real adapter
 boundary, not a knob.
 
-## Install
+## Runtime support
+
+Bun >= 1.2 is the development runtime. Node >= 24 consumes built `dist/`;
+native Node does not load this package's TypeScript source.
+
+## Quickstart
 
 ```bash
-npm install @corbits/reranking
+npm add @corbits/reranking
 pnpm add @corbits/reranking
 yarn add @corbits/reranking
 bun add @corbits/reranking
 ```
-
-Requires Node >= 24 or Bun >= 1.2. The published export is built `dist/`;
-native Node does not load this package's TypeScript source.
-
-## Use
 
 ```ts
 import { createDefaultScheduler } from "@intx/inference";
@@ -37,8 +37,6 @@ const ranked = await rerankDocuments(
   { deps },
 );
 ```
-
-## Full example
 
 ```ts
 import { createDefaultScheduler } from "@intx/inference";
@@ -99,15 +97,17 @@ forking the package. `RerankAdapter` mirrors inference's `ProviderAdapter`
 Transport, classification, and retry come from `@intx/inference` — the same
 `deps.fetch` path and `createDefaultRetryPolicy` a chat call uses.
 
-## Contributing
+## Development
 
 ```bash
+git clone https://github.com/corbitsdev/corbits-reranking.git
+cd corbits-reranking
 bun install
 bun run build      # tsc -p tsconfig.build.json
 bun run test       # bun test ./src
 bun run typecheck  # tsc --noEmit
 ```
 
-Node >= 24, Bun >= 1.2.0.
+## License
 
 LGPL-2.1-only — see [`LICENSE`](LICENSE).

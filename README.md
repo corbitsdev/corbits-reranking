@@ -6,12 +6,11 @@ returns `{id, score}` sorted descending.
 
 ## Install
 
-```bash
-bun add @corbits/reranking
-```
+Not published to npm yet. Until a registry publish, `npm install @corbits/reranking`
+(and `bun add @corbits/reranking`) 404. Git is the install path.
 
 ```bash
-npm install @corbits/reranking
+bun add github:corbitsdev/corbits-reranking
 ```
 
 Unlike embeddings, reranking has **no OpenAI-compatible standard** and is not

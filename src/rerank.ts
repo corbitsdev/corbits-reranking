@@ -49,14 +49,19 @@ export async function rerankDocuments(
   config: RerankConfig,
   options: RerankOptions,
 ): Promise<RerankResult[]> {
+  const parsed = RerankConfigSchema(config);
+  if (parsed instanceof type.errors) {
+    throw new Error(`invalid rerank config — ${parsed.summary}`);
+  }
+
   if (docs.length === 0) return [];
 
   const registry = options.registry ?? rerankAdapterRegistry;
-  const adapter = registry.resolve(config.apiStyle);
+  const adapter = registry.resolve(parsed.apiStyle);
   const request = adapter.buildRequest(query, docs, {
-    baseURL: config.baseURL,
-    model: config.model,
-    apiKey: config.apiKey,
+    baseURL: parsed.baseURL,
+    model: parsed.model,
+    apiKey: parsed.apiKey,
   });
 
   const body = await runJSONRequest(request, {
@@ -64,7 +69,7 @@ export async function rerankDocuments(
     ...(options.retryPolicy !== undefined
       ? { retryPolicy: options.retryPolicy }
       : {}),
-    ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
+    ...(parsed.timeoutMs !== undefined ? { timeoutMs: parsed.timeoutMs } : {}),
     ...(adapter.extractRetryAfterMs !== undefined
       ? { extractRetryAfterMs: adapter.extractRetryAfterMs }
       : {}),

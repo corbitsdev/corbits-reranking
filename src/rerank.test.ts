@@ -132,6 +132,21 @@ describe("wire formats", () => {
     ).rejects.toThrow(/Unknown rerank API style "nope"/);
   });
 
+  it("rejects a schema-invalid config before posting", async () => {
+    // timeoutMs: 0 is a RerankConfigSchema error. Validate at the call
+    // boundary so a bad config never reaches /rerank.
+    const { deps: d, calls } = deps([]);
+    await expect(
+      rerankDocuments(
+        "q",
+        DOCS,
+        { ...config("tei"), timeoutMs: 0 },
+        { deps: d },
+      ),
+    ).rejects.toThrow(/invalid rerank config/);
+    expect(calls).toHaveLength(0);
+  });
+
   it("rejects a reply in another provider's shape", async () => {
     // Cohere's body through the TEI adapter: the formats do not converge, and
     // a mismatch must fail rather than silently rerank nothing.

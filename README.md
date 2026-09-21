@@ -1,53 +1,32 @@
 # @corbits/reranking
 
-Cross-encoder rerank client. Given a query and a candidate set, `rerankDocuments`
-posts them to a reranker, maps the reply back to your own document ids, and
-returns `{id, score}` sorted descending.
+Cross-encoder rerank client. Given a query and a candidate set,
+`rerankDocuments` posts them to a reranker, maps the reply back to your own
+document ids, and returns `{id, score}` sorted descending.
+
+Unlike embeddings, reranking has no OpenAI-compatible standard — TEI does
+not serve an OpenAI-shaped rerank route at all — so this is a real adapter
+boundary, not a knob.
 
 ## Install
 
-Not published to npm yet. Until a registry publish, `npm install @corbits/reranking`
-(and `bun add @corbits/reranking`) 404. Git is the install path.
-
 ```bash
-bun add github:corbitsdev/corbits-reranking
+npm install @corbits/reranking
+pnpm add @corbits/reranking
+yarn add @corbits/reranking
+bun add @corbits/reranking
 ```
 
-Unlike embeddings, reranking has **no OpenAI-compatible standard** and is not
-converging on one — TEI does not serve an OpenAI-shaped rerank route at all
-([text-embeddings-inference#683](https://github.com/huggingface/text-embeddings-inference/issues/683)).
-So this is a real adapter boundary, not a knob:
+Requires Node >= 24 or Bun >= 1.2. The published export is built `dist/`;
+native Node does not load this package's TypeScript source.
 
-| `apiStyle` | endpoint     | request              | response                                |
-| ---------- | ------------ | -------------------- | --------------------------------------- |
-| `tei`      | `/rerank`    | `{query, texts}`     | `[{index, score}]`                      |
-| `cohere`   | `/v2/rerank` | `{query, documents}` | `{results: [{index, relevance_score}]}` |
-| `voyage`   | `/v1/rerank` | `{query, documents}` | `{data: [{index, relevance_score}]}`    |
-
-Jina's `/rerank` uses Cohere's shape and is served by the `cohere` adapter.
-
-Transport, error classification and retry come from `@intx/inference` rather
-than being reimplemented: requests are `BuiltRequest`s sent through the single
-`deps.fetch` path, failures become an `InferenceError` through the same
-classifiers a chat call uses, and `createDefaultRetryPolicy` decides whether to
-back off or abort.
-
-`RerankAdapter` deliberately mirrors inference's `ProviderAdapter` — same
-`buildRequest` / `parseResponse` members, same optional `extractRetryAfterMs`
-for a provider that signals pacing its own way. Styles resolve through
-`createRerankAdapterRegistry`, which closes over a private `Map` copy so an
-`apiStyle` arriving from config or an environment variable cannot reach an
-inherited member of `Object.prototype` and fail later as an opaque `TypeError`.
-Pass your own `registry` to add a house format without forking the package.
+## Use
 
 ```ts
 import { createDefaultScheduler } from "@intx/inference";
 import { rerankDocuments } from "@corbits/reranking";
 
-// Only `fetch` and `scheduler` are needed — a full harness `Dependencies`
-// also satisfies this if you already have one.
 const deps = { fetch, scheduler: createDefaultScheduler() };
-
 const ranked = await rerankDocuments(
   "how do I deploy to staging?",
   [
@@ -59,69 +38,76 @@ const ranked = await rerankDocuments(
 );
 ```
 
-## API
+## Full example
 
-- `rerankDocuments(query, docs, config, options)` — rerank `RerankDoc[]`
-  (`{id, text}`) against the query and return `RerankResult[]`
-  (`{id, score}`), sorted descending. Empty input short-circuits with no
-  request. Config is validated by `RerankConfigSchema` (`RerankConfig`);
-  options (`RerankOptions`) take `deps`, an optional `retryPolicy`,
-  `registry`, and `signal`.
-- Adapters — `RerankAdapter` (`buildRequest` / `parseResponse`, optional
-  `extractRetryAfterMs`), `RerankAPIStyle` (`tei` | `cohere` | `voyage`),
-  `rerankAdapters`, `rerankAdapterRegistry`, and
-  `createRerankAdapterRegistry` for house formats. Supporting types:
-  `RerankDoc`, `RerankResult`, `RerankRequestConfig`,
-  `RerankRequestBuilder`, `RerankResponseParser`, `RerankAdapterRegistry`.
-- Transport — `runJSONRequest` sends the built request through `deps.fetch`
-  with retry; `extractRetryAfterMs` and `RetryAfterExtractor` handle
-  provider pacing; `ModelRequestError` carries the classified
-  `InferenceError` as `reason` with the URL (`RunRequestOptions` configures
-  the call).
+```ts
+import { createDefaultScheduler } from "@intx/inference";
+import { rerankDocuments } from "@corbits/reranking";
 
-## Scores are mapped by index, never by position
+const deps = { fetch, scheduler: createDefaultScheduler() };
 
-Every one of these protocols addresses documents by their position in the
-_request_ array, and TEI's reply is explicitly unordered. Results are therefore
-mapped back through `docs[index]`, and an out-of-range index raises rather than
-silently attaching a score to the wrong document.
+const ranked = await rerankDocuments(
+  "how do I deploy to staging?",
+  [
+    { id: "doc-1", text: "Staging deploys run from main." },
+    { id: "doc-2", text: "On-call rotation is weekly." },
+    { id: "doc-3", text: "The billing export lives in finance." },
+  ],
+  {
+    baseURL: "https://api.cohere.com",
+    apiStyle: "cohere", // also Jina's /rerank; TEI: "tei"; Voyage: "voyage"
+    model: "rerank-v3.5",
+    apiKey: process.env.COHERE_API_KEY,
+  },
+  { deps },
+);
 
-`RerankDoc.id` exists for this reason: the wire formats only speak in array
-offsets, so translating back to a stable identifier is this package's job rather
-than the caller's.
+for (const { id, score } of ranked) {
+  console.log(id, score);
+}
+```
 
-## Degrading soft is the caller's decision
+Empty input short-circuits without a request. Failures raise
+`ModelRequestError` (transport, HTTP status, or a 200 whose body is not
+JSON). `@corbits/embedding` and `@corbits/reranking` each carry their own
+copy of this class, so `instanceof` does not hold across the two — catch on
+`error.name === "ModelRequestError"`. This package does not swallow errors:
+a reranker outage is a policy decision at the call site.
 
-This package raises on failure. It does not swallow errors, because a reranker
-outage should be a policy decision at the call site — a retrieval pipeline
-typically wants to fall back to its fused ordering and carry on, which it cannot
-do if the failure is hidden here.
+## How it works
 
-## Errors
+Built-in `apiStyle` values:
 
-Every failure — transport, HTTP status, or a 200 whose body is not JSON —
-raises `ModelRequestError`, carrying the classified `InferenceError` as `reason`
-and the URL.
+| `apiStyle` | endpoint     | request              | response                                |
+| ---------- | ------------ | -------------------- | --------------------------------------- |
+| `tei`      | `/rerank`    | `{query, texts}`     | `[{index, score}]`                      |
+| `cohere`   | `/v2/rerank` | `{query, documents}` | `{results: [{index, relevance_score}]}` |
+| `voyage`   | `/v1/rerank` | `{query, documents}` | `{data: [{index, relevance_score}]}`    |
 
-Note that `@corbits/embedding` and `@corbits/reranking` each carry their own
-copy of this class until the shared transport is upstreamed, so `instanceof`
-does not hold across the two. Catching both? Discriminate on
-`error.name === "ModelRequestError"`.
+Every protocol addresses documents by their position in the request array,
+and TEI's reply is explicitly unordered. Results are mapped back through
+`docs[index]`; an out-of-range index raises rather than attaching a score to
+the wrong document. `RerankDoc.id` exists because the wire formats only
+speak in array offsets.
 
-## Versioning
+Styles resolve through `createRerankAdapterRegistry`, which closes over a
+private `Map` copy so an `apiStyle` from config cannot hit
+`Object.prototype`. Pass your own `registry` to add a house format without
+forking the package. `RerankAdapter` mirrors inference's `ProviderAdapter`
+(`buildRequest` / `parseResponse`, optional `extractRetryAfterMs`).
 
-Semver. Released manually with `bun run build && npm publish` once CI is green.
+Transport, classification, and retry come from `@intx/inference` — the same
+`deps.fetch` path and `createDefaultRetryPolicy` a chat call uses.
 
-## Development
-
-Requires Node.js >= 24 and Bun >= 1.2.0.
+## Contributing
 
 ```bash
 bun install
-bun test ./src
-bunx tsc --noEmit
+bun run build      # tsc -p tsconfig.build.json
+bun run test       # bun test ./src
+bun run typecheck  # tsc --noEmit
 ```
 
-## License
+Node >= 24, Bun >= 1.2.0.
 
 LGPL-2.1-only — see [`LICENSE`](LICENSE).

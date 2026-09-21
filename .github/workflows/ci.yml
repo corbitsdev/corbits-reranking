@@ -24,3 +24,13 @@ jobs:
       - run: bun test ./src
       - run: bunx prettier --check src
       - run: bun run build
+      - name: Pack and import on Node
+        run: |
+          set -euo pipefail
+          tgz=$(npm pack)
+          repo="$PWD"
+          work=$(mktemp -d)
+          cd "$work"
+          npm init -y
+          npm install "$repo/$tgz"
+          node --input-type=module -e "import { rerankDocuments } from '@corbits/reranking'; if (typeof rerankDocuments !== 'function') process.exit(1)"

@@ -1,7 +1,7 @@
 import { type } from "arktype";
 import type { BuiltRequest } from "@intx/inference";
 
-import type { RetryAfterExtractor } from "./request";
+import type { RetryAfterExtractor } from "./request.js";
 
 /**
  * A document offered to the reranker. `id` is the caller's own handle — the

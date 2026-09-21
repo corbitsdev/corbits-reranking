@@ -7,8 +7,8 @@ import {
   type RerankAPIStyle,
   type RerankDoc,
   type RerankResult,
-} from "./adapters";
-import { runJSONRequest, type RequestDependencies } from "./request";
+} from "./adapters.js";
+import { runJSONRequest, type RequestDependencies } from "./request.js";
 
 export const RerankConfigSchema = type({
   /** Provider root, e.g. `http://localhost:8085` for a TEI server. */

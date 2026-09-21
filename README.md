@@ -114,6 +114,8 @@ Semver. Released manually with `bun run build && npm publish` once CI is green.
 
 ## Development
 
+Requires Node.js >= 24 and Bun >= 1.2.0.
+
 ```bash
 bun install
 bun test ./src

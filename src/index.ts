@@ -3,7 +3,7 @@ export {
   RerankConfigSchema,
   type RerankConfig,
   type RerankOptions,
-} from "./rerank";
+} from "./rerank.js";
 export {
   rerankAdapters,
   rerankAdapterRegistry,
@@ -16,11 +16,11 @@ export {
   type RerankRequestConfig,
   type RerankResponseParser,
   type RerankResult,
-} from "./adapters";
+} from "./adapters.js";
 export {
   runJSONRequest,
   extractRetryAfterMs,
   ModelRequestError,
   type RetryAfterExtractor,
   type RunRequestOptions,
-} from "./request";
+} from "./request.js";

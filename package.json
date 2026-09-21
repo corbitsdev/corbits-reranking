@@ -49,6 +49,7 @@
     "url": "https://github.com/corbitsdev/corbits-reranking/issues"
   },
   "engines": {
-    "bun": ">=1.2.0"
+    "bun": ">=1.2.0",
+    "node": ">=24"
   }
 }

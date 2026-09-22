@@ -40,6 +40,7 @@ const model = process.env.RERANK_MODEL;
 export async function rerankFusedCandidates(
   query: string,
   candidates: readonly RerankDoc[],
+  onError: (error: unknown) => void,
 ): Promise<RerankResult[]> {
   try {
     return await rerankDocuments(
@@ -52,9 +53,10 @@ export async function rerankFusedCandidates(
       },
       { deps },
     );
-  } catch {
-    // Reranker unavailable or timed out — degrade to the fused order the
-    // caller already computed rather than fail the search.
+  } catch (error) {
+    // Reranker unavailable or timed out — report it, then degrade to the
+    // fused order the caller already computed rather than fail the search.
+    onError(error);
     return candidates.map((doc, i) => ({
       id: doc.id,
       score: candidates.length - i,

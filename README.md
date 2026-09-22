@@ -16,22 +16,51 @@ bun add @corbits/reranking
 
 `rerankDocuments(query, docs, config, options)` validates config with `RerankConfigSchema`, short-circuits empty input with no request, and returns ranked results. Options carry `deps`, with optional `retryPolicy`, `registry`, and `signal`. Config takes `baseURL` and `apiStyle`, with optional `model` (used by Cohere and Voyage), `apiKey`, and `timeoutMs`.
 
+A retrieval pipeline reads its reranker endpoint from host config at boot — a half-configured reranker should fail boot, not degrade silently later — then reranks each query's fused candidates, falling back to the caller's own ordering on failure so a reranker outage never fails search:
+
 ```ts
 import { createDefaultScheduler } from "@intx/inference";
-import { rerankDocuments } from "@corbits/reranking";
+import {
+  rerankDocuments,
+  type RerankDoc,
+  type RerankResult,
+} from "@corbits/reranking";
 
 const deps = { fetch, scheduler: createDefaultScheduler() };
 
-const ranked = await rerankDocuments(
-  "how do I deploy to staging?",
-  [
-    { id: "doc-1", text: "Staging deploys run from main…" },
-    { id: "doc-2", text: "On-call rotation is weekly…" },
-  ],
-  { baseURL: "http://localhost:8085", apiStyle: "tei" },
-  { deps },
-);
-console.log(ranked);
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+}
+
+const baseURL = requireEnv("RERANK_BASE_URL");
+const model = process.env.RERANK_MODEL;
+
+export async function rerankFusedCandidates(
+  query: string,
+  candidates: readonly RerankDoc[],
+): Promise<RerankResult[]> {
+  try {
+    return await rerankDocuments(
+      query,
+      candidates,
+      {
+        baseURL,
+        apiStyle: "tei",
+        ...(model !== undefined ? { model } : {}),
+      },
+      { deps },
+    );
+  } catch {
+    // Reranker unavailable or timed out — degrade to the fused order the
+    // caller already computed rather than fail the search.
+    return candidates.map((doc, i) => ({
+      id: doc.id,
+      score: candidates.length - i,
+    }));
+  }
+}
 ```
 
 ## How it works

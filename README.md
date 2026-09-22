@@ -1,120 +1,95 @@
 # @corbits/reranking
 
-Cross-encoder rerank client. Given a query and a candidate set, `rerankDocuments`
-posts them to a reranker, maps the reply back to your own document ids, and
-returns `{id, score}` sorted descending.
+Cross-encoder reranking for retrieval pipelines. Send a query plus candidates, get scored ids back in ranked order.
 
-## Install
+Give `rerankDocuments` a query and your own `{id, text}` docs; it posts them to the reranker, maps the reply back to your ids, and returns `{id, score}` sorted descending.
 
-Not published to npm yet. Until a registry publish, `npm install @corbits/reranking`
-(and `bun add @corbits/reranking`) 404. Git is the install path.
+## Runtime support
+
+Runs on Bun >= 1.2 or Node >= 24. The built `dist/` entry is the default import.
+
+## Quickstart
 
 ```bash
-bun add github:corbitsdev/corbits-reranking
+bun add @corbits/reranking
 ```
 
-Unlike embeddings, reranking has **no OpenAI-compatible standard** and is not
-converging on one — TEI does not serve an OpenAI-shaped rerank route at all
-([text-embeddings-inference#683](https://github.com/huggingface/text-embeddings-inference/issues/683)).
-So this is a real adapter boundary, not a knob:
+`rerankDocuments(query, docs, config, options)` validates config with `RerankConfigSchema`, short-circuits empty input with no request, and returns ranked results. Options carry `deps`, with optional `retryPolicy`, `registry`, and `signal`. Config takes `baseURL` and `apiStyle`, with optional `model` (used by Cohere and Voyage), `apiKey`, and `timeoutMs`.
 
-| `apiStyle` | endpoint     | request              | response                                |
+A retrieval pipeline reads its reranker endpoint from host config at boot — a half-configured reranker should fail boot, not degrade silently later — then reranks each query's fused candidates, falling back to the caller's own ordering on failure so a reranker outage never fails search:
+
+```ts
+import { createDefaultScheduler } from "@intx/inference";
+import {
+  rerankDocuments,
+  type RerankDoc,
+  type RerankResult,
+} from "@corbits/reranking";
+
+const deps = { fetch, scheduler: createDefaultScheduler() };
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+}
+
+const baseURL = requireEnv("RERANK_BASE_URL");
+const model = process.env.RERANK_MODEL;
+
+export async function rerankFusedCandidates(
+  query: string,
+  candidates: readonly RerankDoc[],
+  onError: (error: unknown) => void,
+): Promise<RerankResult[]> {
+  try {
+    return await rerankDocuments(
+      query,
+      candidates,
+      {
+        baseURL,
+        apiStyle: "tei",
+        ...(model !== undefined ? { model } : {}),
+      },
+      { deps },
+    );
+  } catch (error) {
+    // Reranker unavailable or timed out — report it, then degrade to the
+    // fused order the caller already computed rather than fail the search.
+    onError(error);
+    return candidates.map((doc, i) => ({
+      id: doc.id,
+      score: candidates.length - i,
+    }));
+  }
+}
+```
+
+## How it works
+
+Reranking has no single OpenAI-style standard, so this package draws the adapter boundary explicitly:
+
+| `apiStyle` | Endpoint     | Request shape        | Response shape                          |
 | ---------- | ------------ | -------------------- | --------------------------------------- |
 | `tei`      | `/rerank`    | `{query, texts}`     | `[{index, score}]`                      |
 | `cohere`   | `/v2/rerank` | `{query, documents}` | `{results: [{index, relevance_score}]}` |
 | `voyage`   | `/v1/rerank` | `{query, documents}` | `{data: [{index, relevance_score}]}`    |
 
-Jina's `/rerank` uses Cohere's shape and is served by the `cohere` adapter.
+Jina's `/rerank` follows the Cohere shape and is served by the `cohere` adapter.
 
-Transport, error classification and retry come from `@intx/inference` rather
-than being reimplemented: requests are `BuiltRequest`s sent through the single
-`deps.fetch` path, failures become an `InferenceError` through the same
-classifiers a chat call uses, and `createDefaultRetryPolicy` decides whether to
-back off or abort.
+`RerankAdapter` mirrors inference's `ProviderAdapter` with `buildRequest` / `parseResponse` plus optional `extractRetryAfterMs`. Styles resolve through `createRerankAdapterRegistry`, which keeps a private `Map` copy so config-supplied style names resolve safely. Pass a custom `registry` to add a house format alongside the built-ins (`rerankAdapters`, `rerankAdapterRegistry`).
 
-`RerankAdapter` deliberately mirrors inference's `ProviderAdapter` — same
-`buildRequest` / `parseResponse` members, same optional `extractRetryAfterMs`
-for a provider that signals pacing its own way. Styles resolve through
-`createRerankAdapterRegistry`, which closes over a private `Map` copy so an
-`apiStyle` arriving from config or an environment variable cannot reach an
-inherited member of `Object.prototype` and fail later as an opaque `TypeError`.
-Pass your own `registry` to add a house format without forking the package.
+Every protocol addresses documents by position in the request array, and TEI replies unordered. Results map back through `docs[index]`, with an out-of-range index raising so a score always lands on the right document. `RerankDoc.id` carries your stable identifier across that index-based wire, and the final list sorts by score descending.
 
-```ts
-import { createDefaultScheduler } from "@intx/inference";
-import { rerankDocuments } from "@corbits/reranking";
+This package raises on failure, leaving fallback policy at the call site. Retrieval pipelines commonly fall back to their fused ordering when the reranker is unavailable and carry on serving.
 
-// Only `fetch` and `scheduler` are needed — a full harness `Dependencies`
-// also satisfies this if you already have one.
-const deps = { fetch, scheduler: createDefaultScheduler() };
+Every failure mode — transport, HTTP status, or a 200 with an unexpected body — raises `ModelRequestError`, carrying the classified `InferenceError` as `reason` plus the request URL. Transport, classification, and retry come from `@intx/inference`: built requests travel the shared `deps.fetch` path with `createDefaultRetryPolicy` guiding backoff. The embedding and reranking packages each carry their own copy of this class while the shared transport is upstreamed, so code catching both discriminates on `error.name === "ModelRequestError"`.
 
-const ranked = await rerankDocuments(
-  "how do I deploy to staging?",
-  [
-    { id: "doc-1", text: "Staging deploys run from main…" },
-    { id: "doc-2", text: "On-call rotation is weekly…" },
-  ],
-  { baseURL: "http://localhost:8085", apiStyle: "tei" },
-  { deps },
-);
-```
+Transport helpers (`runJSONRequest`, `extractRetryAfterMs`, `ModelRequestError`, `RunRequestOptions`, `RetryAfterExtractor`) are also re-exported for sibling one-shot JSON clients.
 
-## API
-
-- `rerankDocuments(query, docs, config, options)` — rerank `RerankDoc[]`
-  (`{id, text}`) against the query and return `RerankResult[]`
-  (`{id, score}`), sorted descending. Empty input short-circuits with no
-  request. Config is validated by `RerankConfigSchema` (`RerankConfig`);
-  options (`RerankOptions`) take `deps`, an optional `retryPolicy`,
-  `registry`, and `signal`.
-- Adapters — `RerankAdapter` (`buildRequest` / `parseResponse`, optional
-  `extractRetryAfterMs`), `RerankAPIStyle` (`tei` | `cohere` | `voyage`),
-  `rerankAdapters`, `rerankAdapterRegistry`, and
-  `createRerankAdapterRegistry` for house formats. Supporting types:
-  `RerankDoc`, `RerankResult`, `RerankRequestConfig`,
-  `RerankRequestBuilder`, `RerankResponseParser`, `RerankAdapterRegistry`.
-- Transport — `runJSONRequest` sends the built request through `deps.fetch`
-  with retry; `extractRetryAfterMs` and `RetryAfterExtractor` handle
-  provider pacing; `ModelRequestError` carries the classified
-  `InferenceError` as `reason` with the URL (`RunRequestOptions` configures
-  the call).
-
-## Scores are mapped by index, never by position
-
-Every one of these protocols addresses documents by their position in the
-_request_ array, and TEI's reply is explicitly unordered. Results are therefore
-mapped back through `docs[index]`, and an out-of-range index raises rather than
-silently attaching a score to the wrong document.
-
-`RerankDoc.id` exists for this reason: the wire formats only speak in array
-offsets, so translating back to a stable identifier is this package's job rather
-than the caller's.
-
-## Degrading soft is the caller's decision
-
-This package raises on failure. It does not swallow errors, because a reranker
-outage should be a policy decision at the call site — a retrieval pipeline
-typically wants to fall back to its fused ordering and carry on, which it cannot
-do if the failure is hidden here.
-
-## Errors
-
-Every failure — transport, HTTP status, or a 200 whose body is not JSON —
-raises `ModelRequestError`, carrying the classified `InferenceError` as `reason`
-and the URL.
-
-Note that `@corbits/embedding` and `@corbits/reranking` each carry their own
-copy of this class until the shared transport is upstreamed, so `instanceof`
-does not hold across the two. Catching both? Discriminate on
-`error.name === "ModelRequestError"`.
-
-## Versioning
-
-Semver. Released manually with `bun run build && npm publish` once CI is green.
+Interchange retrieval pipelines call `rerankDocuments` after hybrid search to lift the strongest candidates to the top. The shared `@intx/inference` transport keeps rerank retries and error taxonomy consistent with chat and embeddings across the hub.
 
 ## Development
-
-Requires Node.js >= 24 and Bun >= 1.2.0.
 
 ```bash
 bun install

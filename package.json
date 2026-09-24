@@ -5,7 +5,6 @@
   "homepage": "https://github.com/corbitsdev/corbits-reranking",
   "version": "0.1.0",
   "license": "LGPL-2.1-only",
-  "author": "Sawyer Cutler <sawyer@dirtroad.dev>",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

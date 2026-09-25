@@ -4,70 +4,33 @@ Cross-encoder reranking for retrieval pipelines. Send a query plus candidates, g
 
 Give `rerankDocuments` a query and your own `{id, text}` docs; it posts them to the reranker, maps the reply back to your ids, and returns `{id, score}` sorted descending.
 
-## Runtime support
-
-Runs on Bun >= 1.2 or Node >= 24. The built `dist/` entry is the default import.
-
 ## Quickstart
 
 ```bash
 bun add @corbits/reranking
 ```
 
-`rerankDocuments(query, docs, config, options?)` validates config with `RerankConfigSchema`, short-circuits empty input with no request, and returns ranked results. Options are optional: `deps` (defaults to global `fetch` and `createDefaultScheduler()`), `retryPolicy`, `registry`, and `signal`. Config takes `baseURL` and `apiStyle`, with optional `model` (used by Cohere and Voyage), `apiKey`, and `timeoutMs`.
-
-A retrieval pipeline reads its reranker endpoint from host config at boot — a half-configured reranker should fail boot, not degrade silently later — then reranks each query's fused candidates, falling back to the caller's own ordering on failure so a reranker outage never fails search:
-
 ```ts
-import { createDefaultScheduler } from "@intx/inference";
-import {
-  rerankDocuments,
-  type RerankDoc,
-  type RerankResult,
-} from "@corbits/reranking";
+import { rerankDocuments } from "@corbits/reranking";
 
-const deps = { fetch, scheduler: createDefaultScheduler() };
+const docs = [
+  { id: "weather", text: "Rain is expected across the valley tomorrow." },
+  { id: "paris", text: "Paris is the capital and largest city of France." },
+  { id: "recipe", text: "Whisk the eggs before folding in the flour." },
+];
 
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`${name} is required`);
-  return value;
-}
+const ranked = await rerankDocuments("What is the capital of France?", docs, {
+  baseURL: "http://localhost:8080",
+  apiStyle: "tei",
+});
 
-const baseURL = requireEnv("RERANK_BASE_URL");
-const model = process.env.RERANK_MODEL;
-
-export async function rerankFusedCandidates(
-  query: string,
-  candidates: readonly RerankDoc[],
-  onError: (error: unknown) => void,
-): Promise<RerankResult[]> {
-  try {
-    return await rerankDocuments(
-      query,
-      candidates,
-      {
-        baseURL,
-        apiStyle: "tei",
-        ...(model !== undefined ? { model } : {}),
-      },
-      { deps },
-    );
-  } catch (error) {
-    // Reranker unavailable or timed out — report it, then degrade to the
-    // fused order the caller already computed rather than fail the search.
-    onError(error);
-    return candidates.map((doc, i) => ({
-      id: doc.id,
-      score: candidates.length - i,
-    }));
-  }
-}
+console.log(ranked);
+// [{ id: "paris", score: 0.99 }, { id: "weather", score: 0.01 }, ...]
 ```
 
-## How it works
+Config takes `baseURL` and `apiStyle`, with optional `model` (required by Cohere and Voyage), `apiKey`, and `timeoutMs`. The optional fourth argument takes `deps` (defaults to global `fetch` and `createDefaultScheduler()`), `retryPolicy`, `registry`, and `signal`.
 
-Reranking has no single OpenAI-style standard, so this package draws the adapter boundary explicitly:
+## How it works
 
 | `apiStyle` | Endpoint     | Request shape        | Response shape                          |
 | ---------- | ------------ | -------------------- | --------------------------------------- |
@@ -77,23 +40,36 @@ Reranking has no single OpenAI-style standard, so this package draws the adapter
 
 Jina's `/rerank` follows the Cohere shape and is served by the `cohere` adapter.
 
-`RerankAdapter` mirrors inference's `ProviderAdapter` with `buildRequest` / `parseResponse` plus optional `extractRetryAfterMs`. Styles resolve through `createRerankAdapterRegistry`, which keeps a private `Map` copy so config-supplied style names resolve safely. Pass a custom `registry` to add a house format alongside the built-ins in `rerankAdapterRegistry`.
+To add a house format, such as a TEI-shaped reply served at `/score`, build a registry with `createRerankAdapterRegistry` and pass it as `registry`:
 
-Every protocol addresses documents by position in the request array, and TEI replies unordered. Results map back through `docs[index]`, with an out-of-range index raising so a score always lands on the right document. `RerankDoc.id` carries your stable identifier across that index-based wire, and the final list sorts by score descending.
+```ts
+import {
+  createRerankAdapterRegistry,
+  rerankAdapterRegistry,
+} from "@corbits/reranking";
 
-This package raises on failure, leaving fallback policy at the call site. Retrieval pipelines commonly fall back to their fused ordering when the reranker is unavailable and carry on serving.
+const tei = rerankAdapterRegistry.resolve("tei");
 
-Every failure mode — transport, HTTP status, or a reply in the wrong shape — raises `RerankRequestError`, carrying the classified `InferenceError` as `reason` plus the request URL. Transport, classification, and retry come from `@intx/inference`: built requests travel the shared `deps.fetch` path with `createDefaultRetryPolicy` guiding backoff. An invalid config raises arktype's `TraversalError` before any request is sent.
-
-Interchange retrieval pipelines call `rerankDocuments` after hybrid search to lift the strongest candidates to the top. The shared `@intx/inference` transport keeps rerank retries and error taxonomy consistent with chat and embeddings across the hub.
-
-## Development
-
-```bash
-bun install
-bun test ./src
-bunx tsc --noEmit
+const registry = createRerankAdapterRegistry({
+  tei,
+  house: {
+    buildRequest: (query, docs, config) => ({
+      url: `${config.baseURL}/score`,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ query, texts: docs.map((doc) => doc.text) }),
+    }),
+    parseResponse: tei.parseResponse,
+  },
+});
 ```
+
+Providers reply with positions into the request array, so each score maps back to your `id` through that index.
+
+## Errors
+
+Failures throw `RerankRequestError` (`extends Error`), carrying the classified `InferenceError` from `@intx/inference` as `reason` and the request `url`. That covers transport failures, HTTP errors, and replies in the wrong shape; retryable errors are retried first under the `retryPolicy` option, which defaults to `createDefaultRetryPolicy()`. An invalid config throws arktype's `TraversalError` before any request is sent, as does a missing `model` for Cohere or Voyage once `docs` is non-empty (an empty `docs` returns `[]` without building a request); an `apiStyle` the registry does not know throws a plain `Error` naming it.
+
+Fallback is left to the caller: catch the error and keep your own ordering if a reranker outage should not fail search.
 
 ## License
 

@@ -27,7 +27,7 @@ jobs:
       - name: Pack and import on Node
         run: |
           set -euo pipefail
-          tgz=$(npm pack)
+          tgz=$(npm pack --silent | tail -n 1)
           repo="$PWD"
           work=$(mktemp -d)
           cd "$work"

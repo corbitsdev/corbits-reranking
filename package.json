@@ -5,17 +5,18 @@
   "homepage": "https://github.com/corbitsdev/corbits-reranking",
   "version": "0.1.0",
   "license": "LGPL-2.1-only",
-  "author": "Sawyer Cutler <sawyer@dirtroad.dev>",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "intx-src": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepack": "bun run build",
     "typecheck": "tsc --noEmit",
     "test": "bun test ./src",
     "format": "prettier -w ."

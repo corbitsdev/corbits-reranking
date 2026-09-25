@@ -11,7 +11,7 @@ import {
   rerankAdapterRegistry,
   type RerankAdapter,
 } from "./adapters";
-import { RerankRequestError } from "./request";
+import { extractRetryAfterMs, RerankRequestError } from "./request";
 
 const DOCS = [
   { id: "a", text: "alpha" },
@@ -260,4 +260,34 @@ test("options default to global fetch", async () => {
   } finally {
     await server.stop();
   }
+});
+
+describe("retry-after parsing", () => {
+  test("reads the seconds form", () => {
+    expect(extractRetryAfterMs(new Headers({ "retry-after": "2" }))).toBe(
+      2_000,
+    );
+  });
+
+  test("returns undefined when the header is absent", () => {
+    expect(extractRetryAfterMs(new Headers())).toBeUndefined();
+  });
+
+  test("clamps a date already past to zero", () => {
+    expect(
+      extractRetryAfterMs(
+        new Headers({ "retry-after": "Wed, 21 Oct 2015 07:28:00 GMT" }),
+      ),
+    ).toBe(0);
+  });
+
+  test("clamps a negative seconds value to zero", () => {
+    expect(extractRetryAfterMs(new Headers({ "retry-after": "-5" }))).toBe(0);
+  });
+
+  test("treats a blank header as absent", () => {
+    expect(
+      extractRetryAfterMs(new Headers({ "retry-after": "   " })),
+    ).toBeUndefined();
+  });
 });

@@ -8,7 +8,7 @@ import {
   rerankAdapters,
   type RerankAPIStyle,
 } from "./adapters";
-import { extractRetryAfterMs, ModelRequestError } from "./request";
+import { extractRetryAfterMs, RerankRequestError } from "./request";
 
 const DOCS = [
   { id: "a", text: "alpha" },
@@ -104,7 +104,7 @@ describe("wire formats", () => {
           { baseURL: "https://rerank.example", apiStyle: style },
           { deps: d },
         ),
-      ).rejects.toThrow(`${style} rerank requires config.model`);
+      ).rejects.toThrow("model must be a string (was undefined)");
     }
     expect(calls).toHaveLength(0);
   });
@@ -143,7 +143,7 @@ describe("wire formats", () => {
         { ...config("tei"), timeoutMs: 0 },
         { deps: d },
       ),
-    ).rejects.toThrow(/invalid rerank config/);
+    ).rejects.toThrow("timeoutMs must be positive (was 0)");
     expect(calls).toHaveLength(0);
   });
 
@@ -153,9 +153,16 @@ describe("wire formats", () => {
     const { deps: d } = deps([
       Response.json({ results: [{ index: 0, relevance_score: 0.5 }] }),
     ]);
-    await expect(
-      rerankDocuments("q", DOCS, config("tei"), { deps: d }),
-    ).rejects.toThrow(/malformed tei rerank response/);
+    const error = await rerankDocuments("q", DOCS, config("tei"), {
+      deps: d,
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(RerankRequestError);
+    expect((error as RerankRequestError).reason.category).toBe(
+      "protocol_mismatch",
+    );
+    expect((error as RerankRequestError).message).toMatch(
+      /malformed tei rerank response/,
+    );
   });
 });
 
@@ -177,7 +184,15 @@ describe("result mapping", () => {
     const { deps: d } = deps([Response.json([{ index: 99, score: 0.5 }])]);
     await expect(
       rerankDocuments("q", DOCS, config("tei"), { deps: d }),
-    ).rejects.toThrow(/index 99 out of bounds for 3 documents/);
+    ).rejects.toThrow(
+      new RerankRequestError(
+        {
+          category: "protocol_mismatch",
+          message: "rerank response index 99 out of bounds for 3 documents",
+        },
+        "https://rerank.example/rerank",
+      ),
+    );
   });
 
   it("returns nothing and issues no request for empty input", async () => {
@@ -207,7 +222,7 @@ describe("retry behaviour inherited from the inference policy", () => {
     const { deps: d, calls } = deps([new Response("nope", { status: 401 })]);
     await expect(
       rerankDocuments("q", DOCS, config("tei"), { deps: d }),
-    ).rejects.toBeInstanceOf(ModelRequestError);
+    ).rejects.toBeInstanceOf(RerankRequestError);
     expect(calls).toHaveLength(1);
   });
 

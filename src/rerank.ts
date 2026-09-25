@@ -1,4 +1,8 @@
 import { type } from "arktype";
+import {
+  classifyProtocolMismatch,
+  ProtocolMismatchError,
+} from "@intx/inference";
 import type { RetryPolicy } from "@intx/types/runtime";
 
 import {
@@ -8,7 +12,11 @@ import {
   type RerankDoc,
   type RerankResult,
 } from "./adapters.js";
-import { runJSONRequest, type RequestDependencies } from "./request.js";
+import {
+  RerankRequestError,
+  runJSONRequest,
+  type RequestDependencies,
+} from "./request.js";
 
 export const RerankConfigSchema = type({
   /** Provider root, e.g. `http://localhost:8085` for a TEI server. */
@@ -49,10 +57,7 @@ export async function rerankDocuments(
   config: RerankConfig,
   options: RerankOptions,
 ): Promise<RerankResult[]> {
-  const parsed = RerankConfigSchema(config);
-  if (parsed instanceof type.errors) {
-    throw new Error(`invalid rerank config — ${parsed.summary}`);
-  }
+  const parsed = RerankConfigSchema.assert(config);
 
   if (docs.length === 0) return [];
 
@@ -76,13 +81,27 @@ export async function rerankDocuments(
     ...(options.signal !== undefined ? { signal: options.signal } : {}),
   });
 
-  return adapter
-    .parseResponse(body)
+  let scored: Array<{ index: number; score: number }>;
+  try {
+    scored = adapter.parseResponse(body);
+  } catch (cause) {
+    if (!(cause instanceof ProtocolMismatchError)) throw cause;
+    throw new RerankRequestError(
+      classifyProtocolMismatch(cause.message, cause.raw),
+      request.url,
+    );
+  }
+
+  return scored
     .map(({ index, score }) => {
       const doc = docs[index];
       if (doc === undefined) {
-        throw new Error(
-          `${request.url}: rerank response index ${index} out of bounds for ${docs.length} documents`,
+        throw new RerankRequestError(
+          classifyProtocolMismatch(
+            `rerank response index ${index} out of bounds for ${docs.length} documents`,
+            body,
+          ),
+          request.url,
         );
       }
       return { id: doc.id, score };

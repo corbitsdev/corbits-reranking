@@ -16,4 +16,4 @@ export {
   type RerankResponseParser,
   type RerankResult,
 } from "./adapters.js";
-export { RerankRequestError } from "./request.js";
+export { RerankRequestError, type RequestDependencies } from "./request.js";

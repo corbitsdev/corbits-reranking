@@ -60,20 +60,20 @@ export type RetryAfterExtractor = (headers: Headers) => number | undefined;
 export type RunRequestOptions = {
   deps: RequestDependencies;
   /** Defaults to Interchange's policy: back off retryables, abort the rest. */
-  retryPolicy?: RetryPolicy;
+  retryPolicy: RetryPolicy | undefined;
   /**
    * Per-attempt ceiling, enforced alongside any caller `signal` rather than
    * instead of it. A cold local model can take a while to page in.
    */
-  timeoutMs?: number;
+  timeoutMs: number | undefined;
   /**
    * Reads `Retry-After` off a failed response. Mirrors `ProviderAdapter`'s
    * member of the same name, so a provider that signals pacing its own way can
    * override without touching the transport. Defaults to
    * {@link extractRetryAfterMs}.
    */
-  extractRetryAfterMs?: RetryAfterExtractor;
-  signal?: AbortSignal;
+  extractRetryAfterMs: RetryAfterExtractor | undefined;
+  signal: AbortSignal | undefined;
 };
 
 type Attempt =

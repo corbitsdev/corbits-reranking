@@ -5,7 +5,7 @@ import { rerankDocuments, type RerankConfig } from "./rerank";
 import {
   createRerankAdapterRegistry,
   rerankAdapterRegistry,
-  rerankAdapters,
+  type RerankAdapter,
   type RerankAPIStyle,
 } from "./adapters";
 import { extractRetryAfterMs, RerankRequestError } from "./request";
@@ -232,7 +232,7 @@ describe("retry behaviour inherited from the inference policy", () => {
     const seen: Array<string | null> = [];
     const registry = createRerankAdapterRegistry({
       tei: {
-        ...rerankAdapters.tei,
+        ...rerankAdapterRegistry.resolve("tei"),
         extractRetryAfterMs: (headers) => {
           seen.push(headers.get("x-ratelimit-reset"));
           return 0;
@@ -301,11 +301,11 @@ describe("adapter registry", () => {
   });
 
   it("is not mutable through the map it was built from", () => {
-    const source: Record<string, (typeof rerankAdapters)["tei"]> = {
-      tei: rerankAdapters.tei,
+    const source: Record<string, RerankAdapter> = {
+      tei: rerankAdapterRegistry.resolve("tei"),
     };
     const registry = createRerankAdapterRegistry(source);
-    source.voyage = rerankAdapters.voyage;
+    source.voyage = rerankAdapterRegistry.resolve("voyage");
     expect(registry.has("voyage")).toBe(false);
   });
 });

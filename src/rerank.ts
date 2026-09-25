@@ -1,6 +1,7 @@
 import { type } from "arktype";
 import {
   classifyProtocolMismatch,
+  createDefaultScheduler,
   ProtocolMismatchError,
 } from "@intx/inference";
 import type { RetryPolicy } from "@intx/types/runtime";
@@ -36,7 +37,8 @@ export const RerankConfigSchema = type({
 export type RerankConfig = typeof RerankConfigSchema.infer;
 
 export type RerankOptions = {
-  deps: RequestDependencies;
+  /** Defaults to global `fetch` and `createDefaultScheduler()`. */
+  deps?: RequestDependencies;
   retryPolicy?: RetryPolicy;
   /** Defaults to the built-in registry: TEI, Cohere/Jina and Voyage. */
   registry?: RerankAdapterRegistry;
@@ -55,7 +57,7 @@ export async function rerankDocuments(
   query: string,
   docs: readonly RerankDoc[],
   config: RerankConfig,
-  options: RerankOptions,
+  options: RerankOptions = {},
 ): Promise<RerankResult[]> {
   const parsed = RerankConfigSchema.assert(config);
 
@@ -70,15 +72,14 @@ export async function rerankDocuments(
   });
 
   const body = await runJSONRequest(request, {
-    deps: options.deps,
-    ...(options.retryPolicy !== undefined
-      ? { retryPolicy: options.retryPolicy }
-      : {}),
-    ...(parsed.timeoutMs !== undefined ? { timeoutMs: parsed.timeoutMs } : {}),
-    ...(adapter.extractRetryAfterMs !== undefined
-      ? { extractRetryAfterMs: adapter.extractRetryAfterMs }
-      : {}),
-    ...(options.signal !== undefined ? { signal: options.signal } : {}),
+    deps: options.deps ?? {
+      fetch: globalThis.fetch,
+      scheduler: createDefaultScheduler(),
+    },
+    retryPolicy: options.retryPolicy,
+    timeoutMs: parsed.timeoutMs,
+    extractRetryAfterMs: adapter.extractRetryAfterMs,
+    signal: options.signal,
   });
 
   let scored: Array<{ index: number; score: number }>;

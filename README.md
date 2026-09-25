@@ -14,7 +14,7 @@ Runs on Bun >= 1.2 or Node >= 24. The built `dist/` entry is the default import.
 bun add @corbits/reranking
 ```
 
-`rerankDocuments(query, docs, config, options)` validates config with `RerankConfigSchema`, short-circuits empty input with no request, and returns ranked results. Options carry `deps`, with optional `retryPolicy`, `registry`, and `signal`. Config takes `baseURL` and `apiStyle`, with optional `model` (used by Cohere and Voyage), `apiKey`, and `timeoutMs`.
+`rerankDocuments(query, docs, config, options?)` validates config with `RerankConfigSchema`, short-circuits empty input with no request, and returns ranked results. Options are optional: `deps` (defaults to global `fetch` and `createDefaultScheduler()`), `retryPolicy`, `registry`, and `signal`. Config takes `baseURL` and `apiStyle`, with optional `model` (used by Cohere and Voyage), `apiKey`, and `timeoutMs`.
 
 A retrieval pipeline reads its reranker endpoint from host config at boot — a half-configured reranker should fail boot, not degrade silently later — then reranks each query's fused candidates, falling back to the caller's own ordering on failure so a reranker outage never fails search:
 
@@ -77,7 +77,7 @@ Reranking has no single OpenAI-style standard, so this package draws the adapter
 
 Jina's `/rerank` follows the Cohere shape and is served by the `cohere` adapter.
 
-`RerankAdapter` mirrors inference's `ProviderAdapter` with `buildRequest` / `parseResponse` plus optional `extractRetryAfterMs`. Styles resolve through `createRerankAdapterRegistry`, which keeps a private `Map` copy so config-supplied style names resolve safely. Pass a custom `registry` to add a house format alongside the built-ins (`rerankAdapters`, `rerankAdapterRegistry`).
+`RerankAdapter` mirrors inference's `ProviderAdapter` with `buildRequest` / `parseResponse` plus optional `extractRetryAfterMs`. Styles resolve through `createRerankAdapterRegistry`, which keeps a private `Map` copy so config-supplied style names resolve safely. Pass a custom `registry` to add a house format alongside the built-ins in `rerankAdapterRegistry`.
 
 Every protocol addresses documents by position in the request array, and TEI replies unordered. Results map back through `docs[index]`, with an out-of-range index raising so a score always lands on the right document. `RerankDoc.id` carries your stable identifier across that index-based wire, and the final list sorts by score descending.
 

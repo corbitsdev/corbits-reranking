@@ -22,11 +22,16 @@ const DOCS = [
 const BASE_URL = "https://rerank.example";
 
 let harness: Harness;
+let undisposed: Harness | undefined;
 
-afterEach(() => harness.dispose());
+afterEach(() => {
+  undisposed?.dispose();
+  undisposed = undefined;
+});
 
 function setup(): Harness {
   harness = setupHarness({ enableInferenceTimers: true });
+  undisposed = harness;
   return harness;
 }
 

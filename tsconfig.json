@@ -25,5 +25,5 @@
 
     "lib": ["ESNext"]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"]
+  "include": ["src/**/*.ts", "e2e/**/*.ts"]
 }

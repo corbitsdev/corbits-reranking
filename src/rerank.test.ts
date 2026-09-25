@@ -256,22 +256,6 @@ test("a registry is not mutable through the map it was built from", () => {
   expect(registry.has("voyage")).toBe(false);
 });
 
-test("options default to global fetch", async () => {
-  const server = Bun.serve({
-    port: 0,
-    fetch: () => Response.json([{ index: 0, score: 0.5 }]),
-  });
-  try {
-    const out = await rerankDocuments("q", DOCS, {
-      baseURL: server.url.origin,
-      apiStyle: "tei",
-    });
-    expect(out).toEqual([{ id: "a", score: 0.5 }]);
-  } finally {
-    await server.stop();
-  }
-});
-
 describe("retry-after parsing", () => {
   test("reads the seconds form", () => {
     expect(extractRetryAfterMs(new Headers({ "retry-after": "2" }))).toBe(

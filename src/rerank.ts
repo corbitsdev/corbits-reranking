@@ -1,6 +1,7 @@
 import { type } from "arktype";
 import {
   classifyProtocolMismatch,
+  createDefaultRetryPolicy,
   createDefaultScheduler,
   ProtocolMismatchError,
 } from "@intx/inference";
@@ -9,22 +10,24 @@ import type { RetryPolicy } from "@intx/types/runtime";
 import {
   rerankAdapterRegistry,
   type RerankAdapterRegistry,
-  type RerankAPIStyle,
   type RerankDoc,
   type RerankResult,
 } from "./adapters.js";
 import {
+  extractRetryAfterMs,
   RerankRequestError,
   runJSONRequest,
   type RequestDependencies,
 } from "./request.js";
 
+const DEFAULT_TIMEOUT_MS = 30_000;
+
 export const RerankConfigSchema = type({
-  /** Provider root, e.g. `http://localhost:8085` for a TEI server. */
+  /** Provider root, e.g. `http://localhost:8080` for a TEI server. */
   baseURL: "string",
   /**
    * A key into the registry. Left open rather than pinned to
-   * {@link RerankAPIStyle} so a custom registry can name a house format; the
+   * `RerankAPIStyle` so a custom registry can name a house format; the
    * registry rejects an unknown style by name. The built-ins are `tei`,
    * `cohere` (also Jina) and `voyage`.
    */
@@ -76,9 +79,9 @@ export async function rerankDocuments(
       fetch: globalThis.fetch,
       scheduler: createDefaultScheduler(),
     },
-    retryPolicy: options.retryPolicy,
-    timeoutMs: parsed.timeoutMs,
-    extractRetryAfterMs: adapter.extractRetryAfterMs,
+    retryPolicy: options.retryPolicy ?? createDefaultRetryPolicy(),
+    timeoutMs: parsed.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    extractRetryAfterMs: adapter.extractRetryAfterMs ?? extractRetryAfterMs,
     signal: options.signal,
   });
 
@@ -109,5 +112,3 @@ export async function rerankDocuments(
     })
     .sort((a, b) => b.score - a.score);
 }
-
-export type { RerankAPIStyle, RerankDoc, RerankResult };

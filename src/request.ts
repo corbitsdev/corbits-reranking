@@ -3,7 +3,6 @@ import {
   classifyHTTPError,
   classifyNetworkError,
   classifyProtocolMismatch,
-  createDefaultRetryPolicy,
   type BuiltRequest,
   type Dependencies,
 } from "@intx/inference";
@@ -59,28 +58,24 @@ export type RetryAfterExtractor = (headers: Headers) => number | undefined;
 
 export type RunRequestOptions = {
   deps: RequestDependencies;
-  /** Defaults to Interchange's policy: back off retryables, abort the rest. */
-  retryPolicy: RetryPolicy | undefined;
+  retryPolicy: RetryPolicy;
   /**
    * Per-attempt ceiling, enforced alongside any caller `signal` rather than
    * instead of it. A cold local model can take a while to page in.
    */
-  timeoutMs: number | undefined;
+  timeoutMs: number;
   /**
    * Reads `Retry-After` off a failed response. Mirrors `ProviderAdapter`'s
    * member of the same name, so a provider that signals pacing its own way can
-   * override without touching the transport. Defaults to
-   * {@link extractRetryAfterMs}.
+   * override without touching the transport.
    */
-  extractRetryAfterMs: RetryAfterExtractor | undefined;
+  extractRetryAfterMs: RetryAfterExtractor;
   signal: AbortSignal | undefined;
 };
 
 type Attempt =
   | { ok: true; body: unknown }
   | { ok: false; error: InferenceError };
-
-const DEFAULT_TIMEOUT_MS = 30_000;
 
 /**
  * `Retry-After` in seconds or as an HTTP date; undefined when absent.
@@ -199,10 +194,13 @@ export async function runJSONRequest(
   request: BuiltRequest,
   options: RunRequestOptions,
 ): Promise<unknown> {
-  const { deps, signal } = options;
-  const policy = options.retryPolicy ?? createDefaultRetryPolicy();
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const extractRetryAfter = options.extractRetryAfterMs ?? extractRetryAfterMs;
+  const {
+    deps,
+    signal,
+    retryPolicy: policy,
+    timeoutMs,
+    extractRetryAfterMs: extractRetryAfter,
+  } = options;
 
   // Time comes from the harness scheduler, not globals, so a virtual-clock
   // test scheduler drives the retry loop deterministically.

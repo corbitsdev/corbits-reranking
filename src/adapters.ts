@@ -193,7 +193,7 @@ export function createRerankAdapterRegistry(
   };
 }
 
-export const rerankAdapters: Readonly<Record<RerankAPIStyle, RerankAdapter>> = {
+const rerankAdapters: Readonly<Record<RerankAPIStyle, RerankAdapter>> = {
   tei,
   cohere,
   voyage,

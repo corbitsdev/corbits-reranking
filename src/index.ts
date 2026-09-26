@@ -5,7 +5,6 @@ export {
   type RerankOptions,
 } from "./rerank.js";
 export {
-  rerankAdapters,
   rerankAdapterRegistry,
   createRerankAdapterRegistry,
   type RerankAdapter,

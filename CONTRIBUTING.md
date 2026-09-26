@@ -2,25 +2,23 @@
 
 ## Development
 
-```bash
+```sh
 bun install
-bun run typecheck
-bun run lint
-bun run test
+bun run check
 ```
 
-`bun run test` is hermetic. `bun run test:e2e` ranks real documents against a
-TEI reranker and skips unless one answers at `TEI_RERANK_URL` (default
-`http://localhost:8080`). CI does not run it. To start one:
+`bun run check` runs typecheck, lint, format check and unit tests. `bun run format` rewrites the tree.
 
-```bash
+Contributors sign the [CLA](CLA.md) on their first PR; the CLA bot explains how.
+
+`bun run test:e2e` ranks real documents against a TEI reranker and skips unless
+one answers at `TEI_RERANK_URL` (default `http://localhost:8080`). CI does not
+run it. To start one:
+
+```sh
 docker run -p 8080:80 ghcr.io/huggingface/text-embeddings-inference:cpu-latest \
   --model-id BAAI/bge-reranker-base
 ```
-
-## Versioning
-
-Semver. Releases run `npm publish` (`prepack` builds) with green CI.
 
 ## Commit messages
 

@@ -1,37 +1,27 @@
-name: CI
+name: ci
 
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
 
 jobs:
   check:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [24]
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 24
       - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
       - run: bun install --frozen-lockfile
-      - run: bunx tsc --noEmit
-      - run: bun run lint
-      - run: bun test ./src
-      - run: bun run format:check
-      - run: bun run build
-      - name: Pack and import on Node
+      - run: bun run check
+      - name: node consumer smoke
         run: |
           set -euo pipefail
-          tgz=$(npm pack --silent | tail -n 1)
-          repo="$PWD"
-          work=$(mktemp -d)
-          cd "$work"
-          npm init -y
-          npm install "$repo/$tgz"
-          node --input-type=module -e "import { rerankDocuments } from '@corbits/reranking'; if (typeof rerankDocuments !== 'function') process.exit(1)"
+          TARBALL="$PWD/$(npm pack --silent)"
+          mkdir -p "$RUNNER_TEMP/c" && cd "$RUNNER_TEMP/c"
+          npm init -y >/dev/null && npm pkg set type=module >/dev/null
+          npm install "$TARBALL"
+          node -e 'import("@corbits/reranking").then((m) => { for (const n of ["rerankDocuments", "createRerankAdapterRegistry", "RerankRequestError"]) if (typeof m[n] !== "function") throw new Error("missing export: " + n); })'

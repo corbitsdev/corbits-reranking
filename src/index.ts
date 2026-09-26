@@ -17,10 +17,4 @@ export {
   type RerankResponseParser,
   type RerankResult,
 } from "./adapters.js";
-export {
-  runJSONRequest,
-  extractRetryAfterMs,
-  ModelRequestError,
-  type RetryAfterExtractor,
-  type RunRequestOptions,
-} from "./request.js";
+export { RerankRequestError } from "./request.js";

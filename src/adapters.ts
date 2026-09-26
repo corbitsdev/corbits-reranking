@@ -37,7 +37,7 @@ export type RerankRequestBuilder = (
  */
 export type RerankResponseParser = (
   body: unknown,
-) => Array<{ index: number; score: number }>;
+) => { index: number; score: number }[];
 
 /**
  * One rerank wire format: how to build the request and how to read the reply.

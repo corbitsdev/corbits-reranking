@@ -21,8 +21,9 @@ jobs:
           bun-version: latest
       - run: bun install --frozen-lockfile
       - run: bunx tsc --noEmit
+      - run: bun run lint
       - run: bun test ./src
-      - run: bunx prettier --check src
+      - run: bunx prettier --check .
       - run: bun run build
       - name: Pack and import on Node
         run: |

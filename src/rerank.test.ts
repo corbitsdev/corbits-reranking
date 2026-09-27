@@ -148,10 +148,10 @@ describe("retry", () => {
     const error = await rerank({ baseURL: BASE_URL, apiStyle: "tei" });
 
     expect(error).toBeInstanceOf(RerankRequestError);
-    expect((error as RerankRequestError).reason.category).toBe(
-      "credential_failure",
-    );
-    expect((error as RerankRequestError).url).toBe(`${BASE_URL}/rerank`);
+    expect(error).toMatchObject({
+      reason: { category: "credential_failure" },
+      url: `${BASE_URL}/rerank`,
+    });
     expect(harness.scenario.matchedRequests()).toHaveLength(1);
   });
 
@@ -183,9 +183,7 @@ describe("errors", () => {
     const error = await rerank({ baseURL: BASE_URL, apiStyle: "tei" });
 
     expect(error).toBeInstanceOf(RerankRequestError);
-    expect((error as RerankRequestError).reason.category).toBe(
-      "protocol_mismatch",
-    );
+    expect(error).toMatchObject({ reason: { category: "protocol_mismatch" } });
   });
 
   test("an out-of-range index is a protocol mismatch", async () => {
@@ -195,9 +193,11 @@ describe("errors", () => {
     const error = await rerank({ baseURL: BASE_URL, apiStyle: "tei" });
 
     expect(error).toBeInstanceOf(RerankRequestError);
-    expect((error as RerankRequestError).reason.message).toBe(
-      "rerank response index 99 out of bounds for 3 documents",
-    );
+    expect(error).toMatchObject({
+      reason: {
+        message: "rerank response index 99 out of bounds for 3 documents",
+      },
+    });
   });
 
   test.each(["cohere", "voyage"])(
@@ -206,7 +206,8 @@ describe("errors", () => {
       setup();
       const error = await rerank({ baseURL: BASE_URL, apiStyle });
 
-      expect((error as Error).message).toBe(
+      expect(error).toHaveProperty(
+        "message",
         "model must be a string (was undefined)",
       );
       expect(harness.scenario.matchedRequests()).toHaveLength(0);
@@ -221,7 +222,10 @@ describe("errors", () => {
       timeoutMs: 0,
     });
 
-    expect((error as Error).message).toBe("timeoutMs must be positive (was 0)");
+    expect(error).toHaveProperty(
+      "message",
+      "timeoutMs must be positive (was 0)",
+    );
     expect(harness.scenario.matchedRequests()).toHaveLength(0);
   });
 
@@ -229,8 +233,9 @@ describe("errors", () => {
     setup();
     for (const apiStyle of ["nope", "toString"]) {
       const error = await rerank({ baseURL: BASE_URL, apiStyle });
-      expect((error as Error).message).toMatch(
-        `Unknown rerank API style "${apiStyle}"`,
+      expect(error).toHaveProperty(
+        "message",
+        expect.stringContaining(`Unknown rerank API style "${apiStyle}"`),
       );
     }
   });

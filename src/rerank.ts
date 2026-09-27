@@ -85,7 +85,7 @@ export async function rerankDocuments(
     signal: options.signal,
   });
 
-  let scored: Array<{ index: number; score: number }>;
+  let scored: { index: number; score: number }[];
   try {
     scored = adapter.parseResponse(body);
   } catch (cause) {

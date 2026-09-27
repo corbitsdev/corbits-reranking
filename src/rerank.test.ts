@@ -200,6 +200,24 @@ describe("errors", () => {
     });
   });
 
+  test("a duplicate index is a protocol mismatch", async () => {
+    setup();
+    reply(
+      200,
+      JSON.stringify([
+        { index: 0, score: 0.5 },
+        { index: 0, score: 0.9 },
+      ]),
+    );
+
+    const error = await rerank({ baseURL: BASE_URL, apiStyle: "tei" });
+
+    expect(error).toBeInstanceOf(RerankRequestError);
+    expect(error).toMatchObject({
+      reason: { message: "rerank response repeats index 0" },
+    });
+  });
+
   test.each(["cohere", "voyage"])(
     "%s without a model fails before posting",
     async (apiStyle) => {
@@ -247,6 +265,22 @@ test("empty input returns nothing without a request", async () => {
   expect(harness.scenario.matchedRequests()).toHaveLength(0);
 });
 
+test("empty input still rejects an unknown apiStyle", async () => {
+  setup();
+  const error = await rerank({ baseURL: BASE_URL, apiStyle: "nope" }, []);
+  expect(error).toHaveProperty(
+    "message",
+    expect.stringContaining('Unknown rerank API style "nope"'),
+  );
+});
+
+test("a trailing slash on baseURL is trimmed", async () => {
+  setup();
+  reply(200, "[]");
+  await rerank({ baseURL: `${BASE_URL}/`, apiStyle: "tei" });
+  expect(harness.scenario.matchedRequests()[0]?.url).toBe(`${BASE_URL}/rerank`);
+});
+
 test("a registry is not mutable through the map it was built from", () => {
   const source: Record<string, RerankAdapter> = {
     tei: rerankAdapterRegistry.resolve("tei"),
@@ -278,6 +312,15 @@ describe("retry-after parsing", () => {
   test("clamps a negative seconds value to zero", () => {
     expect(extractRetryAfterMs(new Headers({ "retry-after": "-5" }))).toBe(0);
   });
+
+  test.each(["999999999", "Fri, 01 Jan 2099 00:00:00 GMT"])(
+    "caps %s at 60 seconds",
+    (value) => {
+      expect(extractRetryAfterMs(new Headers({ "retry-after": value }))).toBe(
+        60_000,
+      );
+    },
+  );
 
   test("treats a blank header as absent", () => {
     expect(

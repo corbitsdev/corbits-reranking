@@ -19,10 +19,10 @@ import type { InferenceError, RetryPolicy } from "@intx/types/runtime";
  * a 429 from a rerank endpoint is classified and backed off exactly as one from
  * a chat endpoint.
  *
- * XXX: this file is duplicated, modulo the wording of this comment, in `@corbits/embedding`. It is not
- * shared infrastructure yet — the intended home is `@intx/inference` itself, as
- * a non-streaming sibling of `runInference`, pending that upstream
- * conversation. Fix both copies or neither.
+ * XXX: duplicated in `@corbits/embedding` (src/request.ts), which throws
+ * `EmbeddingRequestError` where this throws `RerankRequestError`. The blocker
+ * is that `@intx/inference` has no non-streaming JSON request helper; that is
+ * the intended home. Fix both copies or neither.
  */
 
 /**
@@ -36,20 +36,17 @@ import type { InferenceError, RetryPolicy } from "@intx/types/runtime";
 export type RequestDependencies = Pick<Dependencies, "fetch" | "scheduler">;
 
 /**
- * Raised for every failure mode: transport, HTTP status, and a 200 whose body
- * is not the JSON the protocol promises.
- *
- * XXX: duplicated alongside this module, so `instanceof` does not hold across
- * the embedding and reranking copies. Discriminate on
- * `error.name === "ModelRequestError"` when catching both.
+ * Raised for every failure mode: transport, HTTP status, and a reply that is
+ * not the shape the protocol promises. `reason` is the classified
+ * `InferenceError`, carried as data the way `@intx/inference` does.
  */
-export class ModelRequestError extends Error {
+export class RerankRequestError extends Error {
   constructor(
     readonly reason: InferenceError,
     readonly url: string,
   ) {
     super(`${url}: ${reason.message}`);
-    this.name = "ModelRequestError";
+    this.name = "RerankRequestError";
   }
 }
 
@@ -227,7 +224,7 @@ export async function runJSONRequest(
       elapsedMs: deps.scheduler.now() - startedAt,
     });
     if (decision.kind === "abort") {
-      throw new ModelRequestError(result.error, request.url);
+      throw new RerankRequestError(result.error, request.url);
     }
 
     // Aborting mid-delay wakes immediately; the next attempt then fails its

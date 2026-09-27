@@ -1,5 +1,5 @@
 import { type } from "arktype";
-import type { BuiltRequest } from "@intx/inference";
+import { ProtocolMismatchError, type BuiltRequest } from "@intx/inference";
 
 import type { RetryAfterExtractor } from "./request.js";
 
@@ -30,7 +30,11 @@ export type RerankRequestBuilder = (
   config: RerankRequestConfig,
 ) => BuiltRequest;
 
-/** Positions into the `docs` array the request was built from. */
+/**
+ * Positions into the `docs` array the request was built from. Throws
+ * `ProtocolMismatchError` on a reply it cannot read, per the
+ * `@intx/inference` `ResponseParser` contract.
+ */
 export type RerankResponseParser = (
   body: unknown,
 ) => Array<{ index: number; score: number }>;
@@ -67,25 +71,20 @@ function headers(config: RerankRequestConfig): Record<string, string> {
   return out;
 }
 
-function invalid(style: RerankAPIStyle, summary: string): never {
-  throw new Error(`malformed ${style} rerank response — ${summary}`);
+function invalid(style: RerankAPIStyle, body: unknown, summary: string): never {
+  throw new ProtocolMismatchError(
+    `malformed ${style} rerank response — ${summary}`,
+    body,
+  );
 }
 
 /**
  * Cohere and Voyage both reject a request without a model. `model` is optional
  * on the config because TEI serves whatever it was started with, so the
- * requirement is enforced per adapter — here, by name, rather than as a 400
- * discovered in production.
+ * requirement is enforced per adapter rather than as a 400 discovered in
+ * production.
  */
-function requireModel(
-  style: RerankAPIStyle,
-  model: string | undefined,
-): string {
-  if (model === undefined) {
-    throw new Error(`${style} rerank requires config.model`);
-  }
-  return model;
-}
+const WithModel = type({ model: "string" });
 
 /** TEI: `{query, texts}` -> a bare array of `{index, score}`, unordered. */
 const TeiResponse = type({ index: "number", score: "number" }).array();
@@ -98,7 +97,7 @@ const tei: RerankAdapter = {
   }),
   parseResponse: (body) => {
     const parsed = TeiResponse(body);
-    if (parsed instanceof type.errors) invalid("tei", parsed.summary);
+    if (parsed instanceof type.errors) invalid("tei", body, parsed.summary);
     return [...parsed];
   },
 };
@@ -117,14 +116,14 @@ const cohere: RerankAdapter = {
     url: `${config.baseURL}/v2/rerank`,
     headers: headers(config),
     body: JSON.stringify({
-      model: requireModel("cohere", config.model),
+      model: WithModel.assert(config).model,
       query,
       documents: docs.map((doc) => doc.text),
     }),
   }),
   parseResponse: (body) => {
     const parsed = CohereResponse(body);
-    if (parsed instanceof type.errors) invalid("cohere", parsed.summary);
+    if (parsed instanceof type.errors) invalid("cohere", body, parsed.summary);
     return parsed.results.map((r) => ({
       index: r.index,
       score: r.relevance_score,
@@ -142,14 +141,14 @@ const voyage: RerankAdapter = {
     url: `${config.baseURL}/v1/rerank`,
     headers: headers(config),
     body: JSON.stringify({
-      model: requireModel("voyage", config.model),
+      model: WithModel.assert(config).model,
       query,
       documents: docs.map((doc) => doc.text),
     }),
   }),
   parseResponse: (body) => {
     const parsed = VoyageResponse(body);
-    if (parsed instanceof type.errors) invalid("voyage", parsed.summary);
+    if (parsed instanceof type.errors) invalid("voyage", body, parsed.summary);
     return parsed.data.map((r) => ({
       index: r.index,
       score: r.relevance_score,

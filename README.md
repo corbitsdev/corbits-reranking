@@ -83,9 +83,7 @@ Every protocol addresses documents by position in the request array, and TEI rep
 
 This package raises on failure, leaving fallback policy at the call site. Retrieval pipelines commonly fall back to their fused ordering when the reranker is unavailable and carry on serving.
 
-Every failure mode — transport, HTTP status, or a 200 with an unexpected body — raises `ModelRequestError`, carrying the classified `InferenceError` as `reason` plus the request URL. Transport, classification, and retry come from `@intx/inference`: built requests travel the shared `deps.fetch` path with `createDefaultRetryPolicy` guiding backoff. The embedding and reranking packages each carry their own copy of this class while the shared transport is upstreamed, so code catching both discriminates on `error.name === "ModelRequestError"`.
-
-Transport helpers (`runJSONRequest`, `extractRetryAfterMs`, `ModelRequestError`, `RunRequestOptions`, `RetryAfterExtractor`) are also re-exported for sibling one-shot JSON clients.
+Every failure mode — transport, HTTP status, or a reply in the wrong shape — raises `RerankRequestError`, carrying the classified `InferenceError` as `reason` plus the request URL. Transport, classification, and retry come from `@intx/inference`: built requests travel the shared `deps.fetch` path with `createDefaultRetryPolicy` guiding backoff. An invalid config raises arktype's `TraversalError` before any request is sent.
 
 Interchange retrieval pipelines call `rerankDocuments` after hybrid search to lift the strongest candidates to the top. The shared `@intx/inference` transport keeps rerank retries and error taxonomy consistent with chat and embeddings across the hub.
 

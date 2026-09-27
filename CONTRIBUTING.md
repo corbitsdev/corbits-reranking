@@ -2,25 +2,23 @@
 
 ## Development
 
-```bash
+```sh
 bun install
-bun run typecheck
-bun run lint
-bun run test
+bun run check
 ```
 
-`bun run test` is hermetic. `bun run test:e2e` ranks real documents against a
-TEI reranker and skips unless one answers at `TEI_RERANK_URL` (default
-`http://localhost:8080`). CI does not run it. To start one:
+`bun run check` runs typecheck, lint, format check and unit tests. `bun run format` rewrites the tree.
 
-```bash
+Contributors sign the [CLA](CLA.md) on their first PR; the CLA bot explains how.
+
+`bun run test:e2e` ranks real documents against a TEI reranker and skips unless
+one answers at `TEI_RERANK_URL` (default `http://localhost:8080`). CI does not
+run it. To start one:
+
+```sh
 docker run -p 8080:80 ghcr.io/huggingface/text-embeddings-inference:cpu-latest \
   --model-id BAAI/bge-reranker-base
 ```
-
-## Versioning
-
-Semver. Releases run `npm publish` (`prepack` builds) with green CI.
 
 ## Commit messages
 
@@ -28,3 +26,16 @@ Commit subjects and PR titles follow [Conventional Commits](https://www.conventi
 Add `!` only for public API breaks: removed or renamed exports, changed signatures, newly required params. Peer and dependency range changes are `build(deps):` with no `!`.
 Keep subjects imperative, lowercase after the colon, 72 characters or less, and free of ticket IDs.
 Every PR links its issue with a `Closes <issue id>` line in the PR body.
+
+## Releasing
+
+Releases are manual. On a clean, up-to-date `main`:
+
+```sh
+npm version <patch|minor> -m "chore(release): %s"
+git push --follow-tags
+gh release create "v$(node -p 'require("./package.json").version')" --generate-notes
+npm publish
+```
+
+Bump minor only for breaking API changes; everything else is a patch. `prepack` builds `dist/` from the tagged commit.

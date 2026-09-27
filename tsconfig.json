@@ -3,27 +3,19 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "target": "ESNext",
-    "allowJs": true,
-    "resolveJsonModule": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "moduleDetection": "force",
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "moduleResolution": "bundler",
-    "customConditions": ["intx-src"],
-
+    "resolveJsonModule": true,
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "exactOptionalPropertyTypes": true,
-
-    "declaration": true,
-    "declarationMap": true,
-
-    "composite": true,
-    "module": "ESNext",
     "noEmit": true,
-
-    "lib": ["ESNext"]
+    "lib": ["ESNext"],
+    "types": ["bun"]
   },
-  "include": ["src/**/*.ts", "e2e/**/*.ts"]
+  "include": ["src", "e2e"]
 }

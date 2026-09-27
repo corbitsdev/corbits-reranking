@@ -2,7 +2,15 @@
   "name": "@corbits/reranking",
   "version": "0.2.0",
   "description": "Cross-encoder rerank client with TEI, Cohere/Jina and Voyage adapters, built on the Interchange inference primitives",
-  "homepage": "https://github.com/corbitsdev/corbits-reranking",
+  "keywords": [
+    "corbits",
+    "cross-encoder",
+    "inference",
+    "interchange",
+    "rerank",
+    "reranking"
+  ],
+  "homepage": "https://github.com/corbitsdev/corbits-reranking#readme",
   "bugs": {
     "url": "https://github.com/corbitsdev/corbits-reranking/issues"
   },
@@ -19,8 +27,6 @@
   ],
   "type": "module",
   "sideEffects": false,
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -31,14 +37,15 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "prepack": "bun run build",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
-    "test": "bun test ./src",
-    "test:e2e": "bun test ./e2e",
     "format": "oxfmt",
-    "format:check": "oxfmt --check"
+    "format:check": "oxfmt --check",
+    "test": "bun test src --pass-with-no-tests",
+    "test:e2e": "bun test e2e",
+    "check": "bun run typecheck && bun run lint && bun run format:check && bun run test"
   },
   "dependencies": {
     "arktype": "^2.2.3"

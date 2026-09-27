@@ -3,7 +3,7 @@
   "description": "Cross-encoder rerank client with TEI, Cohere/Jina and Voyage adapters, built on the Interchange inference primitives",
   "author": "Sawyer Cutler <sawyer@dirtroad.dev>",
   "homepage": "https://github.com/corbitsdev/corbits-reranking",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "LGPL-2.1-only",
   "type": "module",
   "main": "./dist/index.js",
@@ -20,7 +20,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "bun test ./src",
-    "test:e2e": "bun test ./tests",
+    "test:e2e": "bun test ./e2e",
     "format": "prettier -w ."
   },
   "dependencies": {

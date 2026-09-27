@@ -119,7 +119,9 @@ const registry = createRerankAdapterRegistry({
 
 - A failed request throws `RerankRequestError`. Its `reason` says what went wrong, and `url` says where. Network errors, timeouts, rate limits and server errors are retried first under the retry policy.
 - A bad config throws arktype's `TraversalError` before any request is sent.
-- With non-empty `docs`, a missing `model` for `cohere` or `voyage` throws `TraversalError`, and an `apiStyle` the registry does not know throws an `Error` that names it.
+- An `apiStyle` the registry does not know throws an `Error` that names it. With non-empty `docs`, a missing `model` for `cohere` or `voyage` throws `TraversalError`.
+- A reply with an out-of-range or repeated index throws `RerankRequestError` with a `protocol_mismatch` reason.
+- `Retry-After` is honored up to 60 seconds.
 - A custom `parseResponse` should throw `ProtocolMismatchError` from `@intx/inference` so the failure becomes a `RerankRequestError`. Anything else it throws is rethrown as is.
 
 An empty `docs` list returns `[]` without a request. To keep search working when the reranker is down, catch the error and keep your original order.

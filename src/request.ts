@@ -77,10 +77,19 @@ type Attempt =
   | { ok: true; body: unknown }
   | { ok: false; error: InferenceError };
 
+const MAX_RETRY_AFTER_MS = 60_000;
+
+const clamp = (ms: number): number =>
+  Math.min(MAX_RETRY_AFTER_MS, Math.max(0, ms));
+
 /**
  * `Retry-After` in seconds or as an HTTP date; undefined when absent.
  *
- * Both branches clamp at zero. A server may name an instant that has already
+ * Both branches clamp to `[0, MAX_RETRY_AFTER_MS]`. The ceiling keeps a hostile
+ * or far-future value from overflowing the timer, which fires immediately on
+ * anything past 2^31-1 ms.
+ *
+ * The floor exists because a server may name an instant that has already
  * passed, and `Retry-After: -5` is not unheard of; a negative delay would flow
  * into the retry policy as though it were a pacing hint.
  *
@@ -93,10 +102,10 @@ export const extractRetryAfterMs: RetryAfterExtractor = (headers) => {
   if (header === undefined || header === "") return undefined;
 
   const seconds = Number(header);
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000);
+  if (Number.isFinite(seconds)) return clamp(seconds * 1_000);
 
   const at = Date.parse(header);
-  return Number.isNaN(at) ? undefined : Math.max(0, at - Date.now());
+  return Number.isNaN(at) ? undefined : clamp(at - Date.now());
 };
 
 /** Aborts on the caller's signal or the per-attempt timeout, whichever first. */

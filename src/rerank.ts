@@ -51,7 +51,10 @@ export type RerankOptions = {
 /**
  * Rerank a candidate set, returning `{id, score}` sorted descending.
  *
- * Empty input short-circuits without a request. Every protocol addresses
+ * Empty input short-circuits without a request, after the config and
+ * `apiStyle` are validated. A trailing slash on `baseURL` is trimmed. A reply
+ * that repeats an index is a protocol mismatch rather than silently deduped:
+ * no supported provider does it, so it signals a broken server. Every protocol addresses
  * documents by their position in the request array and TEI's reply is
  * explicitly unordered, so results are mapped back through `docs[index]` rather
  * than by reply position.
@@ -63,13 +66,14 @@ export async function rerankDocuments(
   options: RerankOptions = {},
 ): Promise<RerankResult[]> {
   const parsed = RerankConfigSchema.assert(config);
+  const adapter = (options.registry ?? rerankAdapterRegistry).resolve(
+    parsed.apiStyle,
+  );
 
   if (docs.length === 0) return [];
 
-  const registry = options.registry ?? rerankAdapterRegistry;
-  const adapter = registry.resolve(parsed.apiStyle);
   const request = adapter.buildRequest(query, docs, {
-    baseURL: parsed.baseURL,
+    baseURL: parsed.baseURL.replace(/\/+$/, ""),
     model: parsed.model,
     apiKey: parsed.apiKey,
   });
@@ -96,18 +100,24 @@ export async function rerankDocuments(
     );
   }
 
+  const mismatch = (message: string): RerankRequestError =>
+    new RerankRequestError(
+      classifyProtocolMismatch(message, body),
+      request.url,
+    );
+  const seen = new Set<number>();
   return scored
     .map(({ index, score }) => {
       const doc = docs[index];
       if (doc === undefined) {
-        throw new RerankRequestError(
-          classifyProtocolMismatch(
-            `rerank response index ${index} out of bounds for ${docs.length} documents`,
-            body,
-          ),
-          request.url,
+        throw mismatch(
+          `rerank response index ${index} out of bounds for ${docs.length} documents`,
         );
       }
+      if (seen.has(index)) {
+        throw mismatch(`rerank response repeats index ${index}`);
+      }
+      seen.add(index);
       return { id: doc.id, score };
     })
     .sort((a, b) => b.score - a.score);

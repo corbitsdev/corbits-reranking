@@ -1,6 +1,8 @@
 import { type } from "arktype";
 import {
   classifyProtocolMismatch,
+  createDefaultRetryPolicy,
+  createDefaultScheduler,
   ProtocolMismatchError,
 } from "@intx/inference";
 import type { RetryPolicy } from "@intx/types/runtime";
@@ -8,22 +10,24 @@ import type { RetryPolicy } from "@intx/types/runtime";
 import {
   rerankAdapterRegistry,
   type RerankAdapterRegistry,
-  type RerankAPIStyle,
   type RerankDoc,
   type RerankResult,
 } from "./adapters.js";
 import {
+  extractRetryAfterMs,
   RerankRequestError,
   runJSONRequest,
   type RequestDependencies,
 } from "./request.js";
 
+const DEFAULT_TIMEOUT_MS = 30_000;
+
 export const RerankConfigSchema = type({
-  /** Provider root, e.g. `http://localhost:8085` for a TEI server. */
+  /** Provider root, e.g. `http://localhost:8080` for a TEI server. */
   baseURL: "string",
   /**
    * A key into the registry. Left open rather than pinned to
-   * {@link RerankAPIStyle} so a custom registry can name a house format; the
+   * `RerankAPIStyle` so a custom registry can name a house format; the
    * registry rejects an unknown style by name. The built-ins are `tei`,
    * `cohere` (also Jina) and `voyage`.
    */
@@ -36,7 +40,8 @@ export const RerankConfigSchema = type({
 export type RerankConfig = typeof RerankConfigSchema.infer;
 
 export type RerankOptions = {
-  deps: RequestDependencies;
+  /** Defaults to global `fetch` and `createDefaultScheduler()`. */
+  deps?: RequestDependencies;
   retryPolicy?: RetryPolicy;
   /** Defaults to the built-in registry: TEI, Cohere/Jina and Voyage. */
   registry?: RerankAdapterRegistry;
@@ -55,7 +60,7 @@ export async function rerankDocuments(
   query: string,
   docs: readonly RerankDoc[],
   config: RerankConfig,
-  options: RerankOptions,
+  options: RerankOptions = {},
 ): Promise<RerankResult[]> {
   const parsed = RerankConfigSchema.assert(config);
 
@@ -70,15 +75,14 @@ export async function rerankDocuments(
   });
 
   const body = await runJSONRequest(request, {
-    deps: options.deps,
-    ...(options.retryPolicy !== undefined
-      ? { retryPolicy: options.retryPolicy }
-      : {}),
-    ...(parsed.timeoutMs !== undefined ? { timeoutMs: parsed.timeoutMs } : {}),
-    ...(adapter.extractRetryAfterMs !== undefined
-      ? { extractRetryAfterMs: adapter.extractRetryAfterMs }
-      : {}),
-    ...(options.signal !== undefined ? { signal: options.signal } : {}),
+    deps: options.deps ?? {
+      fetch: globalThis.fetch,
+      scheduler: createDefaultScheduler(),
+    },
+    retryPolicy: options.retryPolicy ?? createDefaultRetryPolicy(),
+    timeoutMs: parsed.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    extractRetryAfterMs: adapter.extractRetryAfterMs ?? extractRetryAfterMs,
+    signal: options.signal,
   });
 
   let scored: Array<{ index: number; score: number }>;
@@ -108,5 +112,3 @@ export async function rerankDocuments(
     })
     .sort((a, b) => b.score - a.score);
 }
-
-export type { RerankAPIStyle, RerankDoc, RerankResult };

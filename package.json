@@ -19,6 +19,7 @@
     "prepack": "bun run build",
     "typecheck": "tsc --noEmit",
     "test": "bun test ./src",
+    "test:e2e": "bun test ./tests",
     "format": "prettier -w ."
   },
   "dependencies": {
